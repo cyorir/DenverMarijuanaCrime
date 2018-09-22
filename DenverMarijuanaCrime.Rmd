@@ -1,0 +1,65 @@
+---
+title: "Denver Marijuana Crime"
+output: html_notebook
+---
+
+This notebook will be used to examine information from the Marijuana Crime dataset provided by the Denver Open Data Catalog. Let's take a look at the dataset and load necessary libraries.
+
+```{r initialize_data}
+library(caret, quietly = TRUE)
+data <- read.csv("crime_marijuana.csv")
+head(data)
+```
+
+Note that the data are divided into two main categories of crimes: industry and non-industry crimes. Industry crimes are those perpetrated by or against a business in the marijuana industry. Non-industry crimes do not have an obvious relation to the industry, but still involved marijuana. Let's try to answer a simple question - Can the location of a crime, given by the x and y coordinates of the crime, be used to predict whether it was an industry-related crime or a non-industry-related crime? One would expect that industry crimes are more likely to be committed near marijuana businesses whereas non-industry crimes are less likely to be committed near marijuana businesses. This question may be a bit trivial, but it provides a simple project to learn a bit more about classification in R. First, let's see how a majority-classifier would perform on this question.
+
+```{r view_offense_categories}
+summary(data$MJ_RELATION_TYPE)
+```
+
+Out of 1454 crimes, 1039 are industry-related, or 71%. In order to meaningfully answer the question, we want to outperform this accuracy.
+
+Why only use the x and y coordinates as features, and not other columns? The other columns can introduce more overfitting (such as INCIDENT_ID) or have information that directly relates to the MJ_RELATION_TYPE (for example, most crimes where the OFFENSE_TYPE_ID is BURGLARY - BUSINESS BY FORCE are industry crimes). GEO_X and GEO_Y do not have an obvious relation to the MJ_RELATION_TYPE field.
+
+Let's start by plotting the crimes based on x, y, mj_relation_type.
+
+```{r plot_classes}
+x <- data$GEO_X
+y <- data$GEO_Y
+class <- data$MJ_RELATION_TYPE
+x_ind <- x[class == "INDUSTRY\n"]
+y_ind <- y[class == "INDUSTRY\n"]
+x_nind <- x[class == "NON-INDUSTRY\n"]
+y_nind <- y[class == "NON-INDUSTRY\n"]
+plot(x_nind,y_nind,col=rgb(red=1,green=0,blue=0, alpha=0.2), pch=16, xlab = "GEO_X", ylab = "GEO_Y")
+points(x_ind,y_ind,col=rgb(red=0,green=0,blue=0, alpha=0.2), pch=16)
+legend("bottomright",NULL,unique(class),col=1:length(unique(class)),pch=16)
+```
+
+That looks promising! The industry crimes seem to be densely packed whereas the non-industry crimes seem to be more spread out. Next, we create a training/testing data split using caret.
+
+```{r train_test_split}
+data_nona <- data[complete.cases(data),]
+tindex <- createDataPartition(data_nona$MJ_RELATION_TYPE, p=0.8, list=FALSE)
+data_train <- data_nona[tindex,]
+x_train <- data_train[,c("GEO_X","GEO_Y")]
+y_train <- data_train[,"MJ_RELATION_TYPE"]
+data_test <- data_nona[-tindex,]
+x_test <- data_test[,c("GEO_X","GEO_Y")]
+y_test <- data_test[,"MJ_RELATION_TYPE"]
+```
+
+With the training and testing data split, the model can be created.
+
+```{r model_training}
+mjFit <- train(x=x_train, y=y_train)
+```
+
+Finally we can test the model.
+
+```{r model_testing}
+pred <- predict(mjFit, x_test)
+confusionMatrix(pred, y_test)
+```
+
+That turns out to be a decent result, indicating that there probably is a relation between crime location and MJ_RELATION_TYPE. We can answer our question affirmatively.
